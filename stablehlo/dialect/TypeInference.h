@@ -40,6 +40,73 @@ void reifyGatherDimSizes(int64_t resultRank,
                          ArrayRef<int64_t> startIndexMap,
                          int64_t indexVectorDim, SmallVectorImpl<Value>& shape);
 
+// TODO(zhouxin) Remove these utils when all type inference code are integrated
+// And move `WindowDimension` to `TypeInference.cpp`
+
+bool compatibleShapeAndElementType(Type type1, Type type2,
+                                   bool ignoreFpPrecision = false);
+
+FailureOr<SmallVector<int64_t>> convert1DAttribute(
+    Optional<DenseIntElementsAttr> optionalAttr, Optional<Location> loc,
+    StringRef attrName);
+
+FailureOr<SmallVector<std::pair<int64_t, int64_t>>> convertPaddingAttribute(
+    Optional<DenseIntElementsAttr> optionalAttr, Optional<Location> loc);
+
+// Convert a 1D dense bool attribute to a list of values.
+FailureOr<SmallVector<bool>> convertWindowReversalAttribute(
+    Optional<DenseElementsAttr> optionalAttr, Optional<Location> loc,
+    StringRef attrName);
+
+// WindowDimension described how the kernel window moves across the base area
+// in a particular dimension.
+// Describes the windowing in an operation such as convolution.
+// The window is moved across a base area and for each position of the
+// window a computation is performed. The field below describes the
+// window and the movement of the window across a base area.
+struct WindowDimension {
+  int64_t size = 0;
+  int64_t stride = 1;
+  int64_t paddingLow = 0;
+  int64_t paddingHigh = 0;
+  int64_t windowDilation = 1;
+  int64_t baseDilation = 1;
+  bool windowReversal = false;
+};
+
+FailureOr<SmallVector<WindowDimension>>
+verifyWindowAttributesAndInferWindowDimensions(
+    ArrayRef<int64_t> windowDimensions, ArrayRef<int64_t> windowStrides,
+    ArrayRef<std::pair<int64_t, int64_t>> padding,
+    ArrayRef<int64_t> lhsDilation, ArrayRef<int64_t> rhsDilation,
+    ArrayRef<bool> windowReversal, Optional<Location> loc);
+
+SmallVector<int64_t> inferWindowOutputShape(
+    const ArrayRef<int64_t> baseShape, const ArrayRef<WindowDimension> window);
+
+unsigned potentiallyComplexBitwidth(Type type);
+
+LogicalResult verifyReducerShape(Optional<Location> loc, Block& block,
+                                 ArrayRef<TensorType> inputArgTypes,
+                                 ArrayRef<TensorType> initValueTypes,
+                                 int64_t numInputs,
+                                 ArrayRef<int64_t> allowedDimensions,
+                                 bool allInputsUnranked);
+
+// Verifies replica groups attached to collective communication operations.
+// P1. 'replicaGroups' must be a 2-D tensor.
+// P2. replicaGroups' cannot be empty.
+// P3. If `allGroupsMustHaveSameSize` is true, then each group is of the same
+//     size.
+// P4. All values in `replica_groups` are unique and covers all the values in
+//     the interval [0, N-1], where N is the total number of replica ids.
+// P5. replica group size must be equal to 'expectedGroupSize'.
+LogicalResult verifyReplicaGroups(Optional<Location> location,
+                                  DenseIntElementsAttr replicaGroups,
+                                  bool allGroupsMustHaveSameSize,
+                                  bool useGlobalDeviceIds,
+                                  Optional<size_t> expectedGroupSize);
+
 //===----------------------------------------------------------------------===//
 // Shape functions for ops.
 //===----------------------------------------------------------------------===//
